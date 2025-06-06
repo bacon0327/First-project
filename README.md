@@ -14,6 +14,16 @@
 
 ---
 
+
+## 📦 模型下載
+
+請先下載 BERT 模型檔案，並放置於 best_model 資料夾中。
+👉 [模型下載連結](https://drive.google.com/drive/folders/1vjtY7rQvzkeaqsiSn2SpGMTRLXsk1ymH)
+
+
+---
+
+
 ## 🔧 安裝環境建議
 
 建議使用 Conda 建立虛擬環境，Python 版本建議為 3.10。
@@ -21,10 +31,3 @@
 ```bash
 pip install -r requirements.txt
 
-
----
-
-## 📦 模型下載
-
-請先下載 BERT 模型檔案，並放置於 `best_model` 資料夾中。  
-👉 [模型下載連結](https://drive.google.com/drive/folders/1vjtY7rQvzkeaqsiSn2SpGMTRLXsk1ymH)
