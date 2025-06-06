@@ -7,14 +7,16 @@ import collections
 import re
 from bert_command_classifier import BertCommandClassifier
 from ai_gomoku import GomokuAI
-from datetime import time
+import sys
+import time
+import numpy as np
 
 AUDIO_PATH = "record_temp.wav"
 JSON_OUTPUT_PATH = "output_bert.json"
 TYPE_OUTPUT_PATH = "type.json"
 
 print("載入 Faster-Whisper 模型...")
-whisper_model = WhisperModel("medium", device="cpu", compute_type="int8")
+whisper_model = WhisperModel("large-v3", device="cuda", compute_type="float16")
 print("✅ Faster-Whisper 載入完成。")
 print("載入 BERT 分類器...")
 bert_classifier = BertCommandClassifier("best_model")
@@ -71,22 +73,39 @@ def record_and_segment(out_path=AUDIO_PATH):
         ring_buffer = collections.deque(maxlen=NUM_PADDING_CHUNKS)
         triggered = False
         voiced_frames = []
+        dots = 0
+        frame_count = 0
+        start_time = None
+        
         while True:
             frame = stream.read(CHUNK_SIZE, exception_on_overflow=False)
             is_speech = vad.is_speech(frame, RATE)
+            
+            # 顯示動態點點，每3個frame更新一次
+            if triggered:
+                frame_count += 1
+                if frame_count >= 3:
+                    sys.stdout.write('\r錄音中' + '.' * (dots % 4) + '   ')
+                    sys.stdout.flush()
+                    dots += 1
+                    frame_count = 0
+            
             if not triggered:
                 ring_buffer.append((frame, is_speech))
                 num_voiced = len([f for f, speech in ring_buffer if speech])
-                if num_voiced > 0.8 * ring_buffer.maxlen:
+                # 降低觸發閾值，從0.8降到0.5
+                if num_voiced > 0.5 * ring_buffer.maxlen:
                     triggered = True
+                    start_time = time.time()
                     voiced_frames.extend([f for f, s in ring_buffer])
                     ring_buffer.clear()
             else:
                 voiced_frames.append(frame)
                 ring_buffer.append((frame, is_speech))
                 num_unvoiced = len([f for f, speech in ring_buffer if not speech])
-                if num_unvoiced > 0.8 * ring_buffer.maxlen:
-                    print("偵測到靜音，自動存檔")
+                # 增加最小錄音時間判斷
+                if num_unvoiced > 0.8 * ring_buffer.maxlen and (time.time() - start_time) > 1.0:
+                    print("\n偵測到靜音，自動存檔")
                     wf = wave.open(out_path, 'wb')
                     wf.setnchannels(CHANNELS)
                     wf.setsampwidth(audio.get_sample_size(FORMAT))
@@ -95,7 +114,7 @@ def record_and_segment(out_path=AUDIO_PATH):
                     wf.close()
                     break
     except KeyboardInterrupt:
-        print("錄音手動結束。")
+        print("\n錄音手動結束。")
     finally:
         stream.stop_stream()
         stream.close()
@@ -109,6 +128,7 @@ def ask_type():
     segments = list(segments_generator)
     if segments:
         text = normalize_text(segments[0].text)
+        print(f"辨識結果：{text}")
         if "家具" in text:
             print("進入家具控制模式")
             mode = "furniture"
@@ -130,6 +150,7 @@ def ask_gomoku_type():
     segments = list(segments_generator)
     if segments:
         text = normalize_text(segments[0].text)
+        print(f"辨識結果：{text}")
         if "雙人" in text or "兩人" in text:
             print("模式：雙人對戰")
             return False
@@ -155,6 +176,7 @@ def run_once_and_return_json():
         return None
 
     text = normalize_text(segments[0].text)
+    print(f"辨識結果：{text}")
     label = bert_classifier.predict_label(text)
     print(f"指令類型:label = {label}")
 
@@ -201,3 +223,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
