@@ -11,6 +11,7 @@
 - `bert_command_classifier.py`：BERT 指令分類模組
 - `ai_gomoku.py`：AI 對弈邏輯
 
+
 ---
 
 ## 🔧 安裝環境建議
@@ -19,3 +20,11 @@
 
 ```bash
 pip install -r requirements.txt
+
+
+---
+
+## 📦 模型下載
+
+請先下載 BERT 模型檔案，並放置於 `best_model` 資料夾中。  
+👉 [模型下載連結](https://drive.google.com/drive/folders/1vjtY7rQvzkeaqsiSn2SpGMTRLXsk1ymH)
