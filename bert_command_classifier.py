@@ -50,7 +50,7 @@ class BertCommandClassifier:
             "移動": ["移", "挪", "靠", "搬"],
             "轉向": ["轉", "轉向", "旋轉"]
         }
-        direction_keywords = ["左", "右", "前", "後", "上", "下", "中間", "旁邊"]
+        direction_keywords = ["左", "右", "前", "後", "上", "下", "中間", "旁邊", "右上角", "右下角", "左上角", "左下角"]
         distance_keywords = ["一點點", "稍微", "一點", "多一點", "很多"]
         angle_keywords = ["90度", "180度", "45度", "270度"]
 
@@ -84,7 +84,8 @@ class BertCommandClassifier:
             "type": "furniture_control",
             "object1": object1,
             "object2": object2,
-            "動作": action
+            "動作": action,
+            "指令原文": text  # ← 加上這一行讓 GUI 能正確抓方位
         }
         if direction:
             result["方向"] = direction
