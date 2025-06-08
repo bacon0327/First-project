@@ -1,23 +1,21 @@
-from bert_command_classifier import BertCommandClassifier
-from ai_gomoku import GomokuAI
-import collections
-import json
-import numpy as np
 import pyaudio
-import re
-import sys
-import time
 import wave
 import webrtcvad
-import whisper
+from faster_whisper import WhisperModel
+import json
+import collections
+import re
+from bert_command_classifier import BertCommandClassifier
+from ai_gomoku import GomokuAI
+from datetime import time
 
 AUDIO_PATH = "record_temp.wav"
 JSON_OUTPUT_PATH = "output_bert.json"
 TYPE_OUTPUT_PATH = "type.json"
 
-print("載入 Whisper 模型...")
-whisper_model = whisper.load_model("large", device="cuda")
-print("✅ Whisper 載入完成。")
+print("載入 Faster-Whisper 模型...")
+whisper_model = WhisperModel("medium", device="cpu", compute_type="int8")
+print("✅ Faster-Whisper 載入完成。")
 print("載入 BERT 分類器...")
 bert_classifier = BertCommandClassifier("best_model")
 print("✅ BERT 分類器載入完成。")
@@ -51,27 +49,6 @@ def normalize_text(text):
             .replace("黑棋", "黑子")
             .replace("白棋", "白子")
     )
-
-    # 同音誤字修正
-    for wrong in ["傢俱", "加劇", "傢具", "家俱"]:
-        text = text.replace(wrong, "家具")
-
-    # 方位誤字修正
-    direction_aliases = {
-        "桌上角": "左上角",
-        "桌下角": "左下角",
-        "右上方": "右上角",
-        "右下方": "右下角",
-        "左上方": "左上角",
-        "左下方": "左下角",
-        "入下角": "右下角",
-        "由下角": "右下角",
-        "中監": "中間",
-        "中鍵": "中間"
-    }
-    for wrong, correct in direction_aliases.items():
-        text = text.replace(wrong, correct)
-
     text = mixed_pattern.sub(normalize_coordinate, text)
     return text
 
@@ -94,36 +71,22 @@ def record_and_segment(out_path=AUDIO_PATH):
         ring_buffer = collections.deque(maxlen=NUM_PADDING_CHUNKS)
         triggered = False
         voiced_frames = []
-        dots = 0
-        frame_count = 0
-        start_time = None
-        
         while True:
             frame = stream.read(CHUNK_SIZE, exception_on_overflow=False)
             is_speech = vad.is_speech(frame, RATE)
-            
-            if triggered:
-                frame_count += 1
-                if frame_count >= 3:
-                    sys.stdout.write('\r錄音中' + '.' * (dots % 4) + '   ')
-                    sys.stdout.flush()
-                    dots += 1
-                    frame_count = 0
-            
             if not triggered:
                 ring_buffer.append((frame, is_speech))
                 num_voiced = len([f for f, speech in ring_buffer if speech])
-                if num_voiced > 0.5 * ring_buffer.maxlen:
+                if num_voiced > 0.8 * ring_buffer.maxlen:
                     triggered = True
-                    start_time = time.time()
                     voiced_frames.extend([f for f, s in ring_buffer])
                     ring_buffer.clear()
             else:
                 voiced_frames.append(frame)
                 ring_buffer.append((frame, is_speech))
                 num_unvoiced = len([f for f, speech in ring_buffer if not speech])
-                if num_unvoiced > 0.8 * ring_buffer.maxlen and (time.time() - start_time) > 1.0:
-                    print("\n偵測到靜音，自動存檔")
+                if num_unvoiced > 0.8 * ring_buffer.maxlen:
+                    print("偵測到靜音，自動存檔")
                     wf = wave.open(out_path, 'wb')
                     wf.setnchannels(CHANNELS)
                     wf.setsampwidth(audio.get_sample_size(FORMAT))
@@ -132,7 +95,7 @@ def record_and_segment(out_path=AUDIO_PATH):
                     wf.close()
                     break
     except KeyboardInterrupt:
-        print("\n錄音手動結束。")
+        print("錄音手動結束。")
     finally:
         stream.stop_stream()
         stream.close()
@@ -142,14 +105,18 @@ def record_and_segment(out_path=AUDIO_PATH):
 def ask_type():
     print("請說明你要執行的操作（例如：我要控制家具、我要下五子棋）...")
     record_and_segment(AUDIO_PATH)
-    result = whisper_model.transcribe(AUDIO_PATH, language="zh")
-    text = normalize_text(result["text"].strip())
-    print(f"辨識結果：{text}")
-    if "家具" in text:
-        print("進入家具控制模式")
-        mode = "furniture"
+    segments_generator, _ = whisper_model.transcribe(AUDIO_PATH, language="zh")
+    segments = list(segments_generator)
+    if segments:
+        text = normalize_text(segments[0].text)
+        if "家具" in text:
+            print("進入家具控制模式")
+            mode = "furniture"
+        else:
+            print("進入五子棋模式（預設）")
+            mode = "gomoku"
     else:
-        print("進入五子棋模式（預設）")
+        print("無法辨識語音，默認為五子棋")
         mode = "gomoku"
 
     with open(TYPE_OUTPUT_PATH, "w", encoding="utf-8") as f:
@@ -159,29 +126,35 @@ def ask_type():
 def ask_gomoku_type():
     print("請問是雙人對戰還是人機對戰？")
     record_and_segment(AUDIO_PATH)
-    result = whisper_model.transcribe(AUDIO_PATH, language="zh")
-    text = normalize_text(result["text"].strip())
-    print(f"辨識結果：{text}")
-    if "雙人" in text or "兩人" in text:
-        print("模式：雙人對戰")
-        return False
+    segments_generator, _ = whisper_model.transcribe(AUDIO_PATH, language="zh")
+    segments = list(segments_generator)
+    if segments:
+        text = normalize_text(segments[0].text)
+        if "雙人" in text or "兩人" in text:
+            print("模式：雙人對戰")
+            return False
     print("未偵測到有效輸出，預設為人機對戰")
     return True
 
 def run_once_and_return_json():
     record_and_segment(AUDIO_PATH)
-    result = whisper_model.transcribe(
+    segments_generator, _ = whisper_model.transcribe(
         AUDIO_PATH,
         language="zh",
         initial_prompt= (
-            "這是一個語音指令系統，包含家具控制與五子棋。"
-            "玩家會說出像是「黑子下在三之三」、「白子放在五之七」這類語句。"
-            "請確保關鍵詞如：黑子、白子、下、放、之、棋盤座標（三之三、五之七等）都能正確辨識。"
-            "關鍵詞還有：悔棋、回上一步、結束遊戲、重開遊戲"
-        )
-    )
-    text = normalize_text(result["text"].strip())
-    print(f"辨識結果：{text}")
+        "這是一個語音指令系統，包含家具控制與五子棋。"
+        "玩家會說出像是「黑子下在三之三」、「白子放在五之七」這類語句。"
+        "請確保關鍵詞如：黑子、白子、下、放、之、棋盤座標（三之三、五之七等）都能正確辨識。"
+        "關鍵詞還有：悔棋、回上一步、結束遊戲、重開遊戲"
+        ))
+
+    segments = list(segments_generator)
+
+    if not segments:
+        print("無語音內容")
+        return None
+
+    text = normalize_text(segments[0].text)
     label = bert_classifier.predict_label(text)
     print(f"指令類型:label = {label}")
 
@@ -216,6 +189,7 @@ def main():
                     json.dump(result, f, ensure_ascii=False, indent=2)
                 print("指令已寫入 JSON：", result)
 
+                # 🧠 AI 對手回合（若啟用）
                 if mode == "gomoku" and ai_enabled:
                     ai_move = gomoku_ai.get_best_move()
                     gomoku_ai.apply_json_move(ai_move)
