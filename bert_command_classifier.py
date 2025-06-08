@@ -92,5 +92,8 @@ class BertCommandClassifier:
             result["距離"] = distance
         if angle:
             result["角度"] = angle
-
+        position_hints = ["左上角", "左下角", "右上角", "右下角", "中間"]
+        position = next((p for p in position_hints if p in text), None)
+        if position:
+            result["位置"] = position
         return result

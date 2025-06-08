@@ -100,7 +100,8 @@ class FurnitureControl:
                 direction = result.get("方向")
                 distance = result.get("距離")
                 angle = result.get("角度")
-                position_hint = next((pos for pos in POSITION_MAP if pos in text), None)
+                position_hint = result.get("位置") or next((pos for pos in POSITION_MAP if pos in text), None)
+
 
                 if action == "移動" and obj in self.furniture:
                     dx = 10 if distance in ["一點", "一點點", "一些"] else 20
