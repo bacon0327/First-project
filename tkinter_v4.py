@@ -1,17 +1,13 @@
 import tkinter as tk
 import threading
-import math
 from tkinter import messagebox, scrolledtext
 from main import ask_type, ask_gomoku_type, run_once_and_return_json, normalize_text
 from ai_gomoku import GomokuAI
 from gomoku_gui import GomokuGame
+from PIL import Image, ImageTk
+import os
 
 # 定義家具位置、顏色、尺寸
-FURNITURE_COLOR = {
-    "椅子": "brown", "電腦桌": "sienna", "餐桌": "orange",
-    "沙發": "olive drab", "電腦": "gray", "花瓶": "pink",
-    "床": "lightblue", "立燈": "gold"
-}
 FURNITURE_SIZE = {
     "椅子": (40, 40), "電腦桌": (100, 60), "餐桌": (120, 70),
     "沙發": (120, 60), "電腦": (40, 30), "花瓶": (20, 20),
@@ -61,8 +57,6 @@ def gui_ask_gomoku_type(root):
     label.pack(pady=5, padx=5, fill=None, expand=False)
     root.update()
     ai_flag = ask_gomoku_type()
-    # label.config(text=f"模式：{'雙人對戰' if not ai_flag else '人機對戰'}")
-    # root.update()
     root.after(0, label.destroy)
     return ai_flag
 
@@ -73,6 +67,8 @@ class FurnitureControl:
         self.canvas.pack()
 
         self.furniture = {}
+        self.furniture_images = {}  # 圖片容器，避免圖片被垃圾回收
+        self.image_dir = "./images"  # 資料夾路徑，換成你的資料夾
         self.label = tk.Label(root, text="家具控制模式：等待語音指令...", font=("Arial", 14))
         self.label.pack()
 
@@ -87,7 +83,6 @@ class FurnitureControl:
             text = normalize_text(result.get("指令原文") or result.get("遊戲指令") or "") if result else ""
             self.label.config(text=f"✅ 指令：{text}")
 
-
             # 💡 檢查是否有「結束遊戲」關鍵字
             if "終止遊戲" in text:
                 self.label.config(text="🔚 已結束遊戲，返回主選單")
@@ -101,7 +96,6 @@ class FurnitureControl:
                 distance = result.get("距離")
                 angle = result.get("角度")
                 position_hint = result.get("位置") or next((pos for pos in POSITION_MAP if pos in text), None)
-
 
                 if action == "移動" and obj in self.furniture:
                     dx = 10 if distance in ["一點", "一點點", "一些"] else 20
@@ -123,24 +117,29 @@ class FurnitureControl:
                 elif action == "放置" and obj not in self.furniture:
                     x, y = POSITION_MAP.get(position_hint, (300, 200))
                     w, h = FURNITURE_SIZE.get(obj, (60, 40))
-                    rect = self.canvas.create_rectangle(x, y, x + w, y + h, fill=FURNITURE_COLOR.get(obj, "skyblue"), tags=obj)
-                    self.furniture[obj] = rect
-                    self.rotation_angles[obj] = 0
-                    self.label.config(text=f"已放置 {obj} 到 {position_hint or '預設位置'}")
+                    # 讀取圖片檔案
+                    image_path = os.path.join(self.image_dir, f"{obj}.png")  # 檔名需對應到家具物件
+                    if os.path.exists(image_path):
+                        pil_image = Image.open(image_path).resize((w, h))
+                        tk_image = ImageTk.PhotoImage(pil_image)
+                        image_id = self.canvas.create_image(x, y, image=tk_image, anchor="nw")
+                        self.furniture[obj] = image_id
+                        self.furniture_images[obj] = tk_image  # 避免被垃圾回收
+                        self.rotation_angles[obj] = 0
+                        self.label.config(text=f"已放置 {obj} 到 {position_hint or '預設位置'}")
+                    else:
+                        self.label.config(text=f"⚠️ 找不到 {obj} 的圖片檔案")
                 elif action == "轉向" and obj in self.furniture:
                     angle_val = int(angle.replace("度", "")) if angle else 90
                     self.rotation_angles[obj] = (self.rotation_angles[obj] + angle_val) % 360
-                    x1, y1, x2, y2 = self.canvas.coords(self.furniture[obj])
-                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-                    w, h = FURNITURE_SIZE.get(obj, (60, 40))
-                    rad = math.radians(self.rotation_angles[obj])
-                    cos_a, sin_a = math.cos(rad), math.sin(rad)
-                    new_x1 = cx - (w * cos_a - h * sin_a) / 2
-                    new_y1 = cy - (w * sin_a + h * cos_a) / 2
-                    new_x2 = cx + (w * cos_a - h * sin_a) / 2
-                    new_y2 = cy + (w * sin_a + h * cos_a) / 2
-                    self.canvas.coords(self.furniture[obj], new_x1, new_y1, new_x2, new_y2)
-                    self.label.config(text=f"旋轉 {obj} {angle_val} 度")
+                    image_path = os.path.join(self.image_dir, f"{obj}.png")
+                    if os.path.exists(image_path):
+                        pil_image = Image.open(image_path).resize(FURNITURE_SIZE.get(obj, (60, 40)))
+                        pil_image = pil_image.rotate(self.rotation_angles[obj], expand=True)
+                        tk_image = ImageTk.PhotoImage(pil_image)
+                        self.furniture_images[obj] = tk_image  # 更新圖片容器
+                        self.canvas.itemconfig(self.furniture[obj], image=tk_image)
+                        self.label.config(text=f"旋轉 {obj} {angle_val} 度")
                 else:
                     self.label.config(text=f"⚠️ 未支援的家具動作或物件不存在")
             elif result:

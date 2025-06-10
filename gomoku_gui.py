@@ -31,22 +31,32 @@ class GomokuGame:
 
     def update_board(self):
         self.canvas.delete("all")
-        for i in range(15):
-            x = CELL_SIZE + i * CELL_SIZE
+        
+        # ✅ 畫內部格線（從第 1 行開始，跳過最外層線）
+        for i in range(1, 15):
             y = CELL_SIZE + i * CELL_SIZE
-            self.canvas.create_line(CELL_SIZE, y, CELL_SIZE * 15, y)
-            self.canvas.create_line(x, CELL_SIZE, x, CELL_SIZE * 15)
+            x = CELL_SIZE + i * CELL_SIZE
+            self.canvas.create_line(CELL_SIZE, y, CELL_SIZE * 15, y, fill="white")  # 水平線
+            self.canvas.create_line(x, CELL_SIZE, x, CELL_SIZE * 15, fill="white")  # 垂直線
+
+        # ✅ 畫棋盤坐標文字
         for i in range(15):
-            self.canvas.create_text(CELL_SIZE + i * CELL_SIZE, CELL_SIZE / 2, text=str(i + 1), font=("Arial", 10))
-            self.canvas.create_text(CELL_SIZE / 2, CELL_SIZE + i * CELL_SIZE, text=str(i + 1), font=("Arial", 10))
+            self.canvas.create_text(CELL_SIZE + i * CELL_SIZE, CELL_SIZE / 2, text=str(i + 1), font=("Arial", 10), fill="white")
+            self.canvas.create_text(CELL_SIZE / 2, CELL_SIZE + i * CELL_SIZE, text=str(i + 1), font=("Arial", 10), fill="white")
+        
+        # ✅ 畫外框，保留最外層線條
+        self.canvas.create_rectangle(CELL_SIZE, CELL_SIZE, CELL_SIZE * 15, CELL_SIZE * 15, outline="white", width=2)
+        
+        # ✅ 畫棋子
         for (x, y), color in self.ai.state.items():
             if x >= 15 or y >= 15:
                 continue
             cx, cy = CELL_SIZE + x * CELL_SIZE, CELL_SIZE + y * CELL_SIZE
             fill = "black" if color == 1 else "white"
             self.canvas.create_oval(cx - RADIUS, cy - RADIUS, cx + RADIUS, cy + RADIUS, fill=fill, outline="black")
-        self.canvas.create_rectangle(CELL_SIZE, CELL_SIZE, CELL_SIZE * 15, CELL_SIZE * 15, outline="white", width=2)
+        
         self.update_move_textbox()
+
 
     def update_move_textbox(self):
         self.move_textbox.delete("1.0", tk.END)
@@ -84,6 +94,31 @@ class GomokuGame:
         win.after(duration, win.destroy)
 
     def apply_and_check_win(self, move_json, is_ai=False):
+        color = 1 if move_json["玩家棋子顏色"] == "黑子" else 2
+        # ✅ 計算目前黑白子數
+        black_count = list(self.ai.state.values()).count(1)
+        white_count = list(self.ai.state.values()).count(2)
+
+        # ✅ 先判斷第一步必須是黑子
+        if not self.ai.state and color != 1:
+            self.append_textbox("⚠️ 遊戲第一步必須是黑子下！")
+            return False
+
+        # ✅ 輪到誰下
+        if black_count == white_count:
+            # 輪到黑子
+            if color != 1:
+                self.append_textbox("⚠️ 輪到黑子下，請再試一次！")
+                return False
+        elif black_count > white_count:
+            # 輪到白子
+            if color != 2:
+                self.append_textbox("⚠️ 輪到白子下，請再試一次！")
+                return False
+        else:
+            self.append_textbox("⚠️ 棋盤出現異常，請重新開始！")
+            return False
+        
         if not self.ai.apply_json_move(move_json):
             self.append_textbox(f"⚠️ 無效落子（重複）：{move_json['下的格子']}")
             return False
@@ -151,3 +186,9 @@ class GomokuGame:
         self.append_textbox("🎙️ 已重置棋盤，準備進入新局...")
         self.root.update()
         threading.Thread(target=self.auto_listen_loop, daemon=True).start()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("🎮 Gomoku 語音對戰")
+    game = GomokuGame(root, ai_enabled=True)  # 你可將 ai_enabled 設為 False 做雙人對戰
+    root.mainloop()
