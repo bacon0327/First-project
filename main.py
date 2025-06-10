@@ -12,8 +12,10 @@ import webrtcvad
 import whisper
 
 AUDIO_PATH = "record_temp.wav"
-JSON_OUTPUT_PATH = "output_bert.json"
-TYPE_OUTPUT_PATH = "type.json"
+lab2_OUTPUT_PATH = "D:/Program Files/code/GomokuGame/Assets/StreamingAssets/step.json"
+lab3_OUTPUT_PATH = "D:/Program Files/code/GomokuGame/Assets/StreamingAssets/furniture_command.json"
+TYPE_OUTPUT_PATH = "D:/Program Files/code/GomokuGame/Assets/StreamingAssets/change.json"
+last_label = None  # 放在 main.py 最上方做為全域變數
 
 print("載入 Whisper 模型...")
 whisper_model = whisper.load_model("large", device="cuda")
@@ -141,6 +143,10 @@ def record_and_segment(out_path=AUDIO_PATH):
 
 def ask_type():
     print("請說明你要執行的操作（例如：我要控制家具、我要下五子棋）...")
+
+    with open(TYPE_OUTPUT_PATH, "w", encoding="utf-8") as f:
+        json.dump({"type":""}, f, ensure_ascii=False, indent=2)
+
     record_and_segment(AUDIO_PATH)
     result = whisper_model.transcribe(AUDIO_PATH, language="zh")
     text = normalize_text(result["text"].strip())
@@ -169,6 +175,7 @@ def ask_gomoku_type():
     return True
 
 def run_once_and_return_json():
+    global last_label
     record_and_segment(AUDIO_PATH)
     result = whisper_model.transcribe(
         AUDIO_PATH,
@@ -183,6 +190,7 @@ def run_once_and_return_json():
     text = normalize_text(result["text"].strip())
     print(f"辨識結果：{text}")
     label = bert_classifier.predict_label(text)
+    last_label = label
     print(f"指令類型:label = {label}")
 
     if label == 0:
@@ -199,6 +207,7 @@ def run_once_and_return_json():
 
 def main():
     print("=== Whisper + BERT 指令辨識系統啟動 ===")
+
     mode = ask_type()
 
     if mode == "furniture":
@@ -212,16 +221,24 @@ def main():
             print("\n🎤 請說出語音指令...")
             result = run_once_and_return_json()
             if result is not None:
-                with open(JSON_OUTPUT_PATH, "w", encoding="utf-8") as f:
-                    json.dump(result, f, ensure_ascii=False, indent=2)
-                print("指令已寫入 JSON：", result)
+                if mode == "gomoku":
+                    with open(lab2_OUTPUT_PATH, "w", encoding="utf-8") as f:
+                        json.dump(result, f, ensure_ascii=False, indent=2)
+                    print("指令已寫入 JSON：", result)
 
-                if mode == "gomoku" and ai_enabled:
-                    ai_move = gomoku_ai.get_best_move()
-                    gomoku_ai.apply_json_move(ai_move)
-                    with open(JSON_OUTPUT_PATH, "w", encoding="utf-8") as f:
-                        json.dump(ai_move, f, ensure_ascii=False, indent=2)
-                    print("AI 已下棋並更新 JSON：", ai_move)
+                    if ai_enabled and last_label == 1:
+                        ai_move = gomoku_ai.get_best_move()
+                        gomoku_ai.apply_json_move(ai_move)
+                        time.sleep(1)
+                        with open(lab2_OUTPUT_PATH, "w", encoding="utf-8") as f:
+                            json.dump(ai_move, f, ensure_ascii=False, indent=2)
+                        print("AI 已下棋並更新 JSON：", ai_move)
+
+                elif mode == "furniture":
+                    with open(lab3_OUTPUT_PATH, "w", encoding="utf-8") as f:
+                        json.dump(result, f, ensure_ascii=False, indent=2)
+                    print("指令已寫入 JSON：", result)
+
     except KeyboardInterrupt:
         print("使用者中止，程式結束")
 

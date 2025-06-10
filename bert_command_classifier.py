@@ -32,7 +32,7 @@ class BertCommandClassifier:
         text = text.lower()
         restart_keywords = ["再來", "再一局", "重新開始", "再玩一次"]
         quit_keywords = ["不玩", "退出", "結束", "關掉"]
-        regret_keywords = ["悔棋", "倒退", "反悔", "上一步"]
+        regret_keywords = ["悔棋", "倒退", "反悔", "上一步" ,"回棋"]
 
         if any(kw in text for kw in restart_keywords):
             return {"type": "game_control", "遊戲指令": "重新開始"}
