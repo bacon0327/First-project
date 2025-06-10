@@ -175,7 +175,7 @@ def ask_gomoku_type():
     return True
 
 def confirm_switch_mode():
-    print("偵測到『切換』指令。請問您要切換模式嗎？（是/否）")
+    print("請問您要切換模式嗎？（是/否）")
     record_and_segment(AUDIO_PATH)
     result = whisper_model.transcribe(AUDIO_PATH, language="zh")
     text = result["text"].strip()
@@ -262,6 +262,30 @@ def main():
                     continue # 重新開始循環，等待下一個指令
             
             if result is not None:
+                # 檢查是否跨模式指令（需要切換）
+                if mode == "gomoku" and last_label == 3:
+                    print("⚠️ 偵測到家具指令，當前為五子棋模式")
+                    if confirm_switch_mode():
+                        mode = "furniture"
+                        print("模式已切換為家具控制")
+                        with open(TYPE_OUTPUT_PATH, "w", encoding="utf-8") as f:
+                            json.dump({"type": mode}, f, ensure_ascii=False, indent=2)
+                    else:
+                        print("使用者取消切換，忽略此次指令")
+                    continue  # 跳過此次 result 處理
+
+                elif mode == "furniture" and last_label == 1:
+                    print("⚠️ 偵測到五子棋指令，當前為家具模式")
+                    if confirm_switch_mode():
+                        mode = "gomoku"
+                        print("模式已切換為五子棋")
+                        ai_enabled = ask_gomoku_type()
+                        with open(TYPE_OUTPUT_PATH, "w", encoding="utf-8") as f:
+                            json.dump({"type": mode}, f, ensure_ascii=False, indent=2)
+                    else:
+                        print("使用者取消切換，忽略此次指令")
+                    continue
+
                 if mode == "gomoku":
                     with open(lab2_OUTPUT_PATH, "w", encoding="utf-8") as f:
                         json.dump(result, f, ensure_ascii=False, indent=2)
