@@ -11,6 +11,7 @@
 - `gomoku_gui.py`：改進版的五子棋圖形化介面
 - `bert_command_classifier.py`：BERT 指令分類模組
 - `ai_gomoku.py`：AI 對弈邏輯
+- `images/`：存放家具圖形資源的資料夾
 
 
 ---
